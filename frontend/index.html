@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备排队管理系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>设备排队管理系统</h1>
+            <div class="user-management">
+                <div class="user-selector">
+                    <label>当前用户:</label>
+                    <select id="userSelect">
+                        <option value="">请选择用户</option>
+                    </select>
+                    <button id="addUserBtn">添加用户</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="add-device-section">
+            <h2>添加新设备</h2>
+            <div class="add-device-form">
+                <input type="text" id="deviceNameInput" placeholder="设备名称">
+                <button id="addDeviceBtn">添加设备</button>
+            </div>
+        </div>
+
+        <div class="devices-section">
+            <h2>设备列表</h2>
+            <div id="devicesList" class="devices-grid"></div>
+        </div>
+    </div>
+
+    <!-- 用户名输入弹窗 -->
+    <div id="usernameModal" class="modal">
+        <div class="modal-content">
+            <h3>添加用户</h3>
+            <input type="text" id="newUsernameInput" placeholder="请输入用户名">
+            <div class="modal-buttons">
+                <button id="confirmUsername">确定</button>
+                <button id="cancelUsername">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
