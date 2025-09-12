@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台架排队</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .device-card { transition: all 0.2s ease-in-out; }
+        .device-card:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,.1); }
+        .queue-list .badge { font-size: 0.9em; }
+        .current-user-tag { font-style: italic; color: #6c757d; }
+        .notification-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        
+        /* 闪烁动画 */
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .device-available-animation {
+            animation: blink 0.5s ease-in-out 5;
+            border: 3px solid #28a745 !important;
+            box-shadow: 0 0 20px rgba(40, 167, 69, 0.5) !important;
+        }
+        
+        /* 设备卡片整体布局优化 */
+        .device-card .card-body {
+            padding: 1.25rem;
+        }
+        
+        .device-header {
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        /* 状态标签优化 */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        /* 排队列表优化 */
+        .queue-section {
+            margin-top: 0.75rem;
+        }
+        
+        .queue-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.5rem;
+        }
+        
+        /* 队列为空时的样式 */
+        .queue-empty {
+            background-color: #f8f9fa;
+            border: 1px dashed #dee2e6;
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.875rem;
+        }
+        
+        /* 改进卡片footer */
+        .device-card .card-footer {
+            background-color: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            padding: 0.75rem 1rem;
+        }
+        
+        /* 设备详情样式 */
+        .device-details-content {
+            background-color: #f0f2f5;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            font-size: 0.9em;
+            color: #495057;
+            margin-top: 1rem;
+            border-left: 3px solid #0d6efd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <header class="d-flex justify-content-between align-items-center p-3 my-3 text-white bg-dark rounded shadow-sm">
+            <h4 class="mb-0"><i class="bi bi-hdd-stack-fill me-2"></i>台架排队</h4>
+            <div class="col-md-5 text-end">
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addDeviceModal">
+                    <i class="bi bi-plus-circle-fill me-1"></i>添加设备
+                </button>
+            </div>
+        </header>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-people-fill me-2"></i>我的用户管理
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-auto">
+                        <label for="currentUser" class="col-form-label"><strong>当前操作用户:</strong></label>
+                    </div>
+                    <div class="col-auto">
+                        <select class="form-select" id="currentUserSelector">
+                            <option value="">-- 请选择一个用户 --</option>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="输入新用户名" id="newUserName">
+                            <button class="btn btn-primary" type="button" id="addUserBtn">
+                                <i class="bi bi-person-plus-fill me-1"></i>添加用户
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="userList" class="mt-3"></div>
+                <div class="text-muted small mt-2">
+                    
+                </div>
+            </div>
+        </div>
+        
+        <main>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="deviceList"></div>
+        </main>
+    </div>
+
+    <!-- 添加设备模态框 -->
+    <div class="modal fade" id="addDeviceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加新设备</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newDeviceName" class="form-label">设备名称</label>
+                        <input type="text" class="form-control" id="newDeviceName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newDeviceDetails" class="form-label">设备详情 (选填)</label>
+                        <textarea class="form-control" id="newDeviceDetails" rows="3" 
+                                  placeholder="例如：设备型号、配置、注意事项等..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="saveDeviceBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑设备模态框 -->
+    <div class="modal fade" id="editDeviceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改设备信息</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editDeviceId">
+                    <div class="mb-3">
+                        <label for="editDeviceName" class="form-label">设备名称</label>
+                        <input type="text" class="form-control" id="editDeviceName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDeviceDetails" class="form-label">设备详情 (选填)</label>
+                        <textarea class="form-control" id="editDeviceDetails" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="updateDeviceBtn">更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知容器 -->
+    <div class="notification-toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 生成或获取浏览器唯一标识符
+            const getBrowserId = () => {
+                let browserId = localStorage.getItem('browserId');
+                if (!browserId) {
+                    browserId = 'browser_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+                    localStorage.setItem('browserId', browserId);
+                }
+                return browserId;
+            };
+
+            const BROWSER_ID = getBrowserId();
+            console.log('Browser ID:', BROWSER_ID);
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+
+            // --- State Management ---
+            let state = { users: {}, devices: {} };
+            let currentUserId = localStorage.getItem('currentUserId') || null;
+            let originalTitle = document.title;
+            let titleInterval = null;
+
+            // --- UI Elements ---
+            const userSelector = document.getElementById('currentUserSelector');
+            const userList = document.getElementById('userList');
+            const deviceList = document.getElementById('deviceList');
+
+            // --- WebSocket Event Handlers ---
+            ws.onmessage = (event) => {
+                const newState = JSON.parse(event.data);
+                state = newState;
+                render();
+
+                // 处理通知
+                if (newState.notification) {
+                    const notification = newState.notification;
+                    // 只有当通知的用户是当前浏览器的用户时才显示通知
+                    if (notification.type === 'device_available' && 
+                        state.users[notification.user_id] && 
+                        state.users[notification.user_id].browser_id === BROWSER_ID &&
+                        notification.user_id === currentUserId) {
+                        
+                        // 开始标签页闪烁
+                        startTitleBlink(`设备 "${notification.device_name}" 可用了！`);
+                        
+                        // 显示Toast通知
+                        showToast(`设备 "${notification.device_name}" 现在可供你使用了！`, 'success');
+                        
+                        // 高亮显示对应的设备卡片
+                        highlightDeviceCard(notification.device_id);
+                    }
+                }
+            };
+
+            ws.onopen = () => {
+                console.log('WebSocket connection established.');
+                showToast('已连接到服务器', 'success');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket connection closed.');
+                showToast('与服务器断开连接', 'danger');
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showToast('连接错误', 'danger');
+            };
+
+            // 标签页标题闪烁
+            const startTitleBlink = (message) => {
+                stopTitleBlink(); // 先停止之前的闪烁
+                
+                let isOriginal = true;
+                titleInterval = setInterval(() => {
+                    document.title = isOriginal ? message : originalTitle;
+                    isOriginal = !isOriginal;
+                }, 500);
+            };
+
+            const stopTitleBlink = () => {
+                if (titleInterval) {
+                    clearInterval(titleInterval);
+                    titleInterval = null;
+                    document.title = originalTitle;
+                }
+            };
+
+            // 当用户点击页面任何地方时停止闪烁
+            document.addEventListener('click', stopTitleBlink);
+            
+            // 当窗口获得焦点时停止闪烁
+            window.addEventListener('focus', stopTitleBlink);
+
+            // 高亮显示设备卡片
+            const highlightDeviceCard = (deviceId) => {
+                // 先移除所有高亮
+                document.querySelectorAll('.device-available-animation').forEach(el => {
+                    el.classList.remove('device-available-animation');
+                });
+                
+                // 添加高亮到指定设备
+                setTimeout(() => {
+                    const deviceCard = document.querySelector(`[data-device-id="${deviceId}"]`);
+                    if (deviceCard) {
+                        deviceCard.classList.add('device-available-animation');
+                        
+                        // 滚动到该设备卡片
+                        deviceCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // 动画结束后移除类
+                        setTimeout(() => {
+                            deviceCard.classList.remove('device-available-animation');
+                        }, 2500);
+                    }
+                }, 100);
+            };
+
+            // --- Render Functions ---
+            const render = () => {
+                renderUsers();
+                renderDevices();
+            };
+
+            const renderUsers = () => {
+                // 只显示当前浏览器创建的用户
+                const myUsers = Object.values(state.users).filter(
+                    user => user.browser_id === BROWSER_ID
+                );
+
+                // Update selector
+                userSelector.innerHTML = '<option value="">-- 请选择一个用户 --</option>';
+                myUsers.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = user.name;
+                    if (user.id === currentUserId) {
+                        option.selected = true;
+                    }
+                    userSelector.appendChild(option);
+                });
+
+                // If current user doesn't exist anymore or is from another browser, reset it
+                if (currentUserId && (!state.users[currentUserId] || 
+                    state.users[currentUserId].browser_id !== BROWSER_ID)) {
+                    setCurrentUserId(null);
+                }
+
+                // Auto-select first user if none selected
+                if (!currentUserId && myUsers.length > 0) {
+                    setCurrentUserId(myUsers[0].id);
+                }
+
+                // Update user list tags
+                userList.innerHTML = '';
+                myUsers.forEach(user => {
+                    const isCurrentUser = user.id === currentUserId;
+                    userList.innerHTML += `
+                        <span class="badge ${isCurrentUser ? 'bg-primary' : 'bg-secondary'} me-2 p-2">
+                            <i class="bi bi-person-circle me-1"></i>
+                            ${user.name}
+                            ${isCurrentUser ? '<span class="current-user-tag ms-1">(当前)</span>' : ''}
+                            <i class="bi bi-x-circle ms-2" style="cursor: pointer;" 
+                               onclick="deleteUser('${user.id}')"></i>
+                        </span>
+                    `;
+                });
+
+                if (myUsers.length === 0) {
+                    userList.innerHTML = '<p class="text-muted">还没有创建任何用户，请先添加一个用户。</p>';
+                }
+            };
+
+            const renderDevices = () => {
+                deviceList.innerHTML = '';
+                Object.values(state.devices).forEach(device => {
+                    const inUseByUser = device.in_use_by ? state.users[device.in_use_by] : null;
+                    const queueUsers = device.queue.map(uid => state.users[uid]).filter(Boolean);
+
+                    // 状态HTML
+                    let statusHtml;
+                    if (inUseByUser) {
+                        const userTag = inUseByUser.id === currentUserId ? ' (你)' : '';
+                        statusHtml = `
+                            <div class="status-indicator">
+                                <span class="text-danger"><i class="bi bi-person-fill"></i> <strong>正在使用:</strong></span>
+                                <span class="badge bg-danger">${inUseByUser.name}${userTag}</span>
+                            </div>
+                        `;
+                    } else {
+                        statusHtml = `
+                            <div class="status-indicator">
+                                <span class="text-success"><i class="bi bi-check-circle-fill"></i> <strong>状态:</strong></span>
+                                <span class="badge bg-success">空闲可用</span>
+                            </div>
+                        `;
+                    }
+
+                    // 排队列表HTML - 添加退出排队功能
+                    let queueHtml = '<div class="queue-section">';
+                    queueHtml += '<div class="queue-section-title"><i class="bi bi-people"></i> 排队列表</div>';
+                    
+                    if (queueUsers.length > 0) {
+                        queueHtml += '<ol class="list-group list-group-numbered list-group-flush">';
+                        queueUsers.forEach((user, index) => {
+                            const isCurrentUser = user.id === currentUserId;
+                            queueHtml += `
+                                <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2">
+                                    <span>
+                                        ${user.name}
+                                        ${isCurrentUser ? '<span class="badge bg-info ms-1">你</span>' : ''}
+                                    </span>
+                                    ${isCurrentUser ? `
+                                        <button class="btn btn-sm btn-outline-danger py-0 px-1" 
+                                                onclick="leaveQueue('${device.id}')" 
+                                                title="退出排队">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    ` : ''}
+                                </li>
+                            `;
+                        });
+                        queueHtml += '</ol>';
+                    } else {
+                        queueHtml += '<div class="queue-empty">当前无人排队</div>';
+                    }
+                    queueHtml += '</div>';
+                    
+                    // 设备详情 HTML
+                    let detailsHtml = '';
+                    if (device.details && device.details.trim() !== '') {
+                        detailsHtml = `
+                            <div class="device-details-content">
+                                <pre style="margin: 0; font-family: inherit; white-space: pre-wrap;">${device.details}</pre>
+                            </div>
+                        `;
+                    }
+
+                    const actionButtons = generateActionButtons(device);
+
+                    // 设备卡片模板
+                    const card = `
+                        <div class="col">
+                            <div class="card h-100 shadow-sm device-card" data-device-id="${device.id}">
+                                <div class="card-body">
+                                    <div class="device-header">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <h5 class="card-title mb-0">${device.name}</h5>
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        onclick="openEditModal('${device.id}')"
+                                                        title="编辑设备">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        onclick="deleteDevice('${device.id}')"
+                                                        title="删除设备">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    ${detailsHtml}
+                                    
+                                    <div class="device-status-section mt-3">
+                                        ${statusHtml}
+                                        ${queueHtml}
+                                    </div>
+                                </div>
+                                <div class="card-footer">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        ${actionButtons}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    deviceList.innerHTML += card;
+                });
+            };
+
+            const generateActionButtons = (device) => {
+                if (!currentUserId) {
+                    return '<small class="text-warning"><i class="bi bi-exclamation-circle"></i> 请先选择用户</small>';
+                }
+
+                const isCurrentUserUsing = device.in_use_by === currentUserId;
+                const isCurrentUserInQueue = device.queue.includes(currentUserId);
+                const isDeviceFree = !device.in_use_by;
+                const isDeviceOccupied = !isDeviceFree;
+
+                let buttons = '';
+                if (isCurrentUserUsing) {
+                    buttons += `
+                        <button class="btn btn-sm btn-warning" onclick="releaseDevice('${device.id}')">
+                            <i class="bi bi-unlock-fill me-1"></i>释放
+                        </button>
+                    `;
+                } else {
+                    if (isDeviceFree) {
+                        buttons += `
+                            <button class="btn btn-sm btn-success" onclick="useDevice('${device.id}')">
+                                <i class="bi bi-play-circle-fill me-1"></i>使用
+                            </button>
+                        `;
+                    }
+                    if (isDeviceOccupied) {
+                        if (!isCurrentUserInQueue) {
+                            buttons += `
+                                <button class="btn btn-sm btn-primary" onclick="queueDevice('${device.id}')">
+                                    <i class="bi bi-person-plus me-1"></i>排队
+                                </button>
+                            `;
+                        } else {
+                            // 用户已在队列中，显示退出排队按钮
+                            buttons += `
+                                <button class="btn btn-sm btn-secondary" onclick="leaveQueue('${device.id}')">
+                                    <i class="bi bi-box-arrow-right me-1"></i>退出排队
+                                </button>
+                            `;
+                        }
+                        buttons += `
+                            <button class="btn btn-sm btn-danger" onclick="preemptDevice('${device.id}')">
+                                <i class="bi bi-lightning-fill me-1"></i>抢占
+                            </button>
+                        `;
+                    }
+                }
+                return buttons;
+            };
+
+            // --- Action Functions (send messages to server) ---
+            window.sendAction = (action, payload) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    // 为所有请求添加浏览器ID
+                    payload.browser_id = BROWSER_ID;
+                    ws.send(JSON.stringify({ action, payload }));
+                }
+            };
+
+            const setCurrentUserId = (userId) => {
+                currentUserId = userId;
+                if (userId) {
+                    localStorage.setItem('currentUserId', userId);
+                } else {
+                    localStorage.removeItem('currentUserId');
+                }
+                render();
+            };
+
+            // --- Event Listeners ---
+            userSelector.addEventListener('change', (e) => setCurrentUserId(e.target.value));
+
+            document.getElementById('addUserBtn').addEventListener('click', () => {
+                const newUserName = document.getElementById('newUserName').value.trim();
+                if (newUserName) {
+                    sendAction('addUser', { name: newUserName });
+                    document.getElementById('newUserName').value = '';
+                }
+            });
+
+            document.getElementById('saveDeviceBtn').addEventListener('click', () => {
+                const name = document.getElementById('newDeviceName').value.trim();
+                const details = document.getElementById('newDeviceDetails').value.trim();
+                if (name) {
+                    sendAction('addDevice', { name: name, details: details });
+                    bootstrap.Modal.getInstance(document.getElementById('addDeviceModal')).hide();
+                    document.getElementById('newDeviceName').value = '';
+                    document.getElementById('newDeviceDetails').value = '';
+                }
+            });
+
+            document.getElementById('updateDeviceBtn').addEventListener('click', () => {
+                const id = document.getElementById('editDeviceId').value;
+                const name = document.getElementById('editDeviceName').value.trim();
+                const details = document.getElementById('editDeviceDetails').value.trim();
+                if (id && name) {
+                    sendAction('editDevice', { id, name, details: details });
+                    bootstrap.Modal.getInstance(document.getElementById('editDeviceModal')).hide();
+                }
+            });
+
+            // Expose functions to global scope
+            window.deleteUser = (id) => {
+                if(confirm('确定要删除这个用户吗？此操作会将其从所有队列中移除。')) {
+                    sendAction('deleteUser', { id });
+                }
+            };
+
+            window.deleteDevice = (id) => {
+                if(confirm('确定要删除这个设备吗？')) {
+                    sendAction('deleteDevice', { id });
+                }
+            };
+
+            window.useDevice = (deviceId) => sendAction('useDevice', { deviceId, userId: currentUserId });
+            window.queueDevice = (deviceId) => sendAction('queueDevice', { deviceId, userId: currentUserId });
+            window.preemptDevice = (deviceId) => sendAction('preemptDevice', { deviceId, userId: currentUserId });
+            window.releaseDevice = (deviceId) => sendAction('releaseDevice', { deviceId, userId: currentUserId });
+            
+            // 新增：退出排队功能
+            window.leaveQueue = (deviceId) => {
+                sendAction('leaveQueue', { deviceId, userId: currentUserId });
+                showToast('已退出排队', 'info');
+            };
+            
+            window.openEditModal = (deviceId) => {
+                const device = state.devices[deviceId];
+                if(device) {
+                    document.getElementById('editDeviceId').value = device.id;
+                    document.getElementById('editDeviceName').value = device.name;
+                    document.getElementById('editDeviceDetails').value = device.details || '';
+                    new bootstrap.Modal(document.getElementById('editDeviceModal')).show();
+                }
+            };
+
+            // --- Toast 通知 ---
+            const showToast = (message, type = 'info') => {
+                const toastHtml = `
+                    <div class="toast align-items-center text-white bg-${type} border-0" role="alert">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                                    data-bs-dismiss="toast"></button>
+                        </div>
+                    </div>
+                `;
+                
+                const toastContainer = document.querySelector('.notification-toast');
+                const toastElement = document.createElement('div');
+                toastElement.innerHTML = toastHtml;
+                toastContainer.appendChild(toastElement);
+                
+                const toast = new bootstrap.Toast(toastElement.querySelector('.toast'));
+                toast.show();
+                
+                // 5秒后自动移除
+                setTimeout(() => {
+                    toastElement.remove();
+                }, 5000);
+            };
+        });
+    </script>
+</body>
+</html>
